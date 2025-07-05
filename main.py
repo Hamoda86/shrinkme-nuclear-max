@@ -2,14 +2,14 @@ import time
 import threading
 import random
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
-from proxy_scraper import get_working_proxy
+from proxy_scraper import get_working_proxy  # ممكن تحتفظ بها أو تحذفها إذا ما بدك بروكسي
 from twocaptcha import TwoCaptcha
 import os
 
 # === إعدادات ===
 TARGET_URL = "https://shrinkme.ink/KUZP"
 TWO_CAPTCHA_API = "0a88f59668933a935f01996bd1624450"
-CONCURRENT_VISITS = 5
+CONCURRENT_VISITS = 20  # عدد الجلسات المتزامنة
 
 def stealth_sync(page):
     page.evaluate("""
@@ -21,6 +21,16 @@ def stealth_sync(page):
         }
     """)
 
+def random_user_action(page):
+    width, height = page.viewport_size["width"], page.viewport_size["height"]
+    for _ in range(random.randint(3, 6)):
+        x = random.randint(0, width - 1)
+        y = random.randint(0, height - 1)
+        page.mouse.move(x, y, steps=random.randint(5, 15))
+        page.wait_for_timeout(random.randint(300, 700))
+    page.evaluate(f"window.scrollTo(0, {random.randint(100, height)});")
+    page.wait_for_timeout(random.randint(500, 1500))
+
 def close_popups(page):
     try:
         selectors = ["div.popup-close", "button.close", ".modal-close", "div#popup-ad"]
@@ -29,7 +39,7 @@ def close_popups(page):
             for el in elements:
                 try:
                     el.click()
-                    page.wait_for_timeout(500)
+                    page.wait_for_timeout(random.randint(300, 700))
                 except:
                     continue
     except Exception:
@@ -37,7 +47,7 @@ def close_popups(page):
 
 def solve_recaptcha(solver, site_key, url):
     try:
-        print("🔐 reCAPTCHA ...")
+        print("🔐 solving reCAPTCHA ...")
         captcha_id = solver.recaptcha(sitekey=site_key, url=url)
         result = solver.get_result(captcha_id)
         return result.get('code')
@@ -54,22 +64,20 @@ def visit_loop():
     solver = TwoCaptcha(TWO_CAPTCHA_API)
     with sync_playwright() as p:
         while True:
-            proxy = get_working_proxy()
-            print("🌐 استخدام بروكسي:", proxy)
+            # بدون بروكسي الآن:
+            proxy = None
+
+            print("🌐 تشغيل بدون بروكسي")
 
             try:
-                browser = p.chromium.launch(headless=True, proxy={"server": proxy})
+                browser = p.chromium.launch(headless=True)  # شيلنا proxy
                 context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64)...")
                 page = context.new_page()
 
                 stealth_sync(page)
                 page.goto(TARGET_URL, timeout=60000)
                 close_popups(page)
-
-                page.mouse.move(100, 100)
-                page.mouse.click(200, 200)
-                page.keyboard.press("Tab")
-                page.wait_for_timeout(random.randint(2000, 4000))
+                random_user_action(page)
 
                 recaptcha_frame = next((f for f in page.frames if "recaptcha" in f.url), None)
                 if recaptcha_frame:
@@ -93,7 +101,7 @@ def visit_loop():
 
                 print("✅ زيارة مكتملة")
                 log_visit("✅ زيارة ناجحة")
-                page.wait_for_timeout(4000)
+                page.wait_for_timeout(random.randint(3000, 6000))
 
             except PlaywrightTimeoutError:
                 print("🕒 مهلة انتهت")
@@ -108,10 +116,10 @@ def visit_loop():
                     pass
                 time.sleep(random.randint(5, 10))
 
-# === تشغيل الجلسات ===
 if __name__ == "__main__":
-    print("🚀 بدء السكربت النووي بـ", CONCURRENT_VISITS, "جلسة...")
+    print("🚀 بدء السكربت النووي بدون بروكسي بـ", CONCURRENT_VISITS, "جلسة متزامنة...")
     for _ in range(CONCURRENT_VISITS):
         threading.Thread(target=visit_loop, daemon=True).start()
     while True:
         time.sleep(60)
+
